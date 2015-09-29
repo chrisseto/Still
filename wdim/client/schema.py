@@ -24,8 +24,10 @@ class BaseSchema(metaclass=abc.ABCMeta):
     def name(self, schema):
         raise NotImplemented
 
-    def __init__(self, _id, schema, version):
+    def __init__(self, _id, schema, version=None):
         self._id = _id
+        if version is not None:
+            self._id += '::' + version
         self.schema = schema
 
     def validate(self, data):
