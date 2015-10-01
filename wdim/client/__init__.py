@@ -3,6 +3,8 @@ from datetime import datetime
 from bson.objectid import ObjectId
 from tornado.options import options
 
+from wdim.client.storable import Storable
+from wdim.client.namespace import Namespace
 from wdim.client.schema import get_schema
 from wdim.versionedstorage import VersionedStorage
 
@@ -62,8 +64,23 @@ class WdimCollection:
         self._namespace = namespace
         self._collection = VersionedStorage(self.db.collection)
 
+    async def list(self):
+        return [
+            doc['_id'].replace(self.namespace + '::', '') for doc in
+            await self._collection.collection.find({'_id': {'$regex': '^{}::'.format(self.namespace)}}, fields={'_id': True})
+        ]
+
     async def get(self, key, version=None):
-        return await self.collection.get('::'.join([self.namespace, key]), version=version)
+        data = await self.collection.get('::'.join([self.namespace, key]), version=version)
+
+        if data is None:
+            return None
+
+        return {
+            **data,
+            'data': data['data']['data'],
+            '_id': data['_id'].replace(self.namespace + '::', ''),
+        }
 
     async def set(self, key, data):
         schema = await self.get_schema()
@@ -74,10 +91,25 @@ class WdimCollection:
 
         key = key or str(ObjectId())
 
-        return await self.collection.set(
+        try:
+            self.database['schema'].insert({
+                # '_id': sha
+                # 'blob': data
+            })
+        except Exception:
+            pass
+
+        self.database['refs'].update({
+            '_id': key
+        }, {
+            'head': sha,
+            'reflog': {'$push': sha}
+        }, upsert=True)
+
+        return (await self.collection.set(
             '::'.join([self.namespace, key]),
             {'data': data, 'schema': schema._id if schema else None}
-        )
+        )).replace(self.namespace + '::', '')
 
     async def update(self, key, data):
         current = await self.get(key) or {}
@@ -100,3 +132,6 @@ class WdimCollection:
         return await self.collection.update(self.namespace, {
             'schema': schema._id
         })
+
+    async def get_metadata(self):
+        return await self.collection.get(self.namespace)

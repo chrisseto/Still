@@ -4,6 +4,7 @@ import asyncio_mongo
 from tornado.options import define, options
 
 from wdim import client
+from wdim.client.database import MongoLayer
 
 
 try:
@@ -18,15 +19,14 @@ define('namespace', default='sys_shell', help='The namespace to use')
 
 
 async def get_context():
-    connection = await asyncio_mongo.Connection.create(options.db, options.port)
-    database = connection[options.dbname]
-    _client = client.WdimClient(options.namespace, database)
+    connection = await MongoLayer.connect(options.db, options.port, options.dbname)
+
+    assert await client.Storable.connect(connection)
 
     return {
-        'client': _client,
-        'database': database,
-        'mongo_connection': connection,
-        'collection': _client.get_collection('ShellCollection')
+        'client': client,
+        # 'database': database,
+        # 'mongo_connection': connection,
     }
 
 
