@@ -105,22 +105,21 @@ class ForeignField(Field):
         super().__init__(**kwargs)
 
     def parse(self, value):
+        if value is None and not self.required:
+            return None
+
         assert isinstance(
             value,
             (str, bson.ObjectId, self.foreign_class)
         ), 'value must be a primary key or instance of {!r}, got {!r}'.format(self.foreign_class, value)
 
-        if isinstance(value, str):
-            return bson.ObjectId(value)
-
-        if isinstance(value, bson.ObjectId):
+        if isinstance(value, (str, bson.ObjectId)):
             return value
 
         return value._id
 
-    def to_document(self, value, join=False):
-        return value._id
-
     def get_value(self, inst):
         _id = super().get_value(inst)
+        if _id is None:
+            return None
         return AsyncObjectId(_id, klass=self.foreign_class)
