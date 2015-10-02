@@ -1,4 +1,5 @@
 import abc
+import asyncio
 
 from asyncio_mongo import bson
 
@@ -26,17 +27,22 @@ class Field(metaclass=abc.ABCMeta):
         if inst is None:
             return self
 
-        for key, value in inst._fields.items():
-            if value == self:
-                return inst._data.get(key)
-        raise Exception('Wat')
+        return self.get_value(inst)
 
     def __set__(self, instance, value, override=False):
         if not override:
             raise ValueError('Fields are read-only')
+        return self.set_value(inst, value)
 
-        for key, value in instance._fields.items():
-            if value == self:
+    def get_value(self, inst):
+        for key, field in inst._fields.items():
+            if field == self:
+                return inst._data.get(key)
+        raise Exception('Wat')
+
+    def set_value(self, inst, value):
+        for key, field in instance._fields.items():
+            if field == self:
                 instance._data[key] = value
                 return
         raise Exception('Wat')
@@ -58,10 +64,34 @@ class ObjectIdField(Field):
 class StringField(Field):
 
     def parse(self, value):
+        if value is None:
+            return ''
         return str(value)
 
     def to_document(self, value, join=False):
         return value
+
+
+class DictField(Field):
+
+    def parse(self, value):
+        if value is None:
+            return {}
+        return dict(value)
+
+    def to_document(self, value):
+        return value
+
+
+class AsyncObjectId(bson.ObjectId):
+
+    def __init__(self, *args, klass=None, **kwargs):
+        assert isinstance(klass, type), 'klass must be a type'
+        self._klass = klass
+        super().__init__(*args, **kwargs)
+
+    def __await__(self):
+        return self._klass.load(self).__await__()
 
 
 class ForeignField(Field):
@@ -75,14 +105,22 @@ class ForeignField(Field):
         super().__init__(**kwargs)
 
     def parse(self, value):
-        assert isinstance(value, (str, self.foreign_class)), 'value must be a primary key or instance of {!r}'.format(self.foreign_class)
+        assert isinstance(
+            value,
+            (str, bson.ObjectId, self.foreign_class)
+        ), 'value must be a primary key or instance of {!r}, got {!r}'.format(self.foreign_class, value)
 
         if isinstance(value, str):
-            pass
+            return bson.ObjectId(value)
 
-        return value
+        if isinstance(value, bson.ObjectId):
+            return value
+
+        return value._id
 
     def to_document(self, value, join=False):
-        if join:
-            return value.to_document()
         return value._id
+
+    def get_value(self, inst):
+        _id = super().get_value(inst)
+        return AsyncObjectId(_id, klass=self.foreign_class)

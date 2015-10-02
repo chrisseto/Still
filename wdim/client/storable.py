@@ -96,9 +96,8 @@ class Storable(metaclass=StorableMeta):
             for key, value in self._fields.items()
         }
 
-    async def to_document(self, join=False):
+    def to_document(self):
         return {
-            key: value.to_document(self._data.get(key), join=join)
-            for key, value
-            in self._fields.items()
+            ret[key]: field.to_document(self._data.get(key))
+            for key, field in self._fields.items()
         }
