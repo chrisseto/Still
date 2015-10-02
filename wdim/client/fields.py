@@ -1,25 +1,28 @@
 import abc
-import asyncio
+import datetime
+from enum import Enum
 
 from asyncio_mongo import bson
 
 
 class Field(metaclass=abc.ABCMeta):
 
-    def __init__(self, index=False, unique=False):
+    def __init__(self, index=False, unique=False, required=True):
         if unique:
             index = True
 
         self.index = index
         self.unique = unique
+        # TODO implement
+        self.required = required
 
     @abc.abstractmethod
     def parse(self, value):
         raise NotImplemented
 
     @abc.abstractmethod
-    def to_document(self, value, join=False):
-        raise NotImplemented
+    def to_document(self, value):
+        return value
 
     def __get__(self, inst, owner):
         # inst being None indicates that we're being accessed
@@ -32,7 +35,7 @@ class Field(metaclass=abc.ABCMeta):
     def __set__(self, instance, value, override=False):
         if not override:
             raise ValueError('Fields are read-only')
-        return self.set_value(inst, value)
+        return self.set_value(instance, value)
 
     def get_value(self, inst):
         for key, field in inst._fields.items():
@@ -40,7 +43,7 @@ class Field(metaclass=abc.ABCMeta):
                 return inst._data.get(key)
         raise Exception('Wat')
 
-    def set_value(self, inst, value):
+    def set_value(self, instance, value):
         for key, field in instance._fields.items():
             if field == self:
                 instance._data[key] = value
@@ -57,9 +60,6 @@ class ObjectIdField(Field):
             return value
         return bson.ObjectId(value)
 
-    def to_document(self, value, join=False):
-        return value
-
 
 class StringField(Field):
 
@@ -67,9 +67,6 @@ class StringField(Field):
         if value is None:
             return ''
         return str(value)
-
-    def to_document(self, value, join=False):
-        return value
 
 
 class DictField(Field):
@@ -79,8 +76,26 @@ class DictField(Field):
             return {}
         return dict(value)
 
-    def to_document(self, value):
+
+class DatetimeField(Field):
+
+    def parse(self, value):
+        assert isinstance(value, datetime.datetime)
         return value
+
+
+class EnumField(Field):
+
+    def __init__(self, enum, **kwargs):
+        assert issubclass(enum, Enum), 'enum must be of type Enum, got {!r}'.format(enum)
+        self._enum = enum
+        super().__init__(**kwargs)
+
+    def parse(self, value):
+        return self._enum(value)
+
+    def get_value(self, inst):
+        return self._enum(super().get_value(inst))
 
 
 class AsyncObjectId(bson.ObjectId):
