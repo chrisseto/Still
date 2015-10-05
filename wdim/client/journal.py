@@ -1,35 +1,34 @@
-class JournalEntry:
+from datetime import datetime
+
+from wdim.util import pack
+from wdim.client import fields
+from wdim.client.actions import Action
+from wdim.client.storable import Storable
+
+
+class JournalEntry(Storable):
+
+    _id = fields.ObjectIdField()
+
+    action = fields.EnumField(Action)
+    record_id = fields.StringField()
+    timestamp = fields.DatetimeField()
+
+    blob = fields.ForeignField(Storable.ClassGetter('Blob'))
+    schema = fields.ForeignField(Storable.ClassGetter('Blob'), required=False)
+    namespace = fields.ForeignField(Storable.ClassGetter('Namespace'))
+    collection = fields.ForeignField(Storable.ClassGetter('Collection'))
+
+    class Meta:
+        indexes = [
+            pack('timestamp', order=1),
+            pack('namespace', 'collection', 'record_id', order=1),
+            pack('namespace', 'collection', 'record_id', 'timestamp', order=1, unique=True),
+        ]
 
     @classmethod
-    def from_document(cls, document: Dict[str, Any]) -> 'JournalEntry':
-        return cls(
-            document['_id'],
-            document['collection'],
-            document['namespace'],
-            document['action'],
-            document['blob'],
-            schema=document['schema']
-        )
+    async def create(cls, *, timestamp=None, **kwargs):
+        assert timestamp is None, 'Cannot manually add timestamp'
 
-    def __init__(self, _id, collection, namespace, action, blob, schema=None, validate=False):
-        self._id = _id
-        self._blob = blob
-        self._action = action
-        self._schema = schema
-        self._namespace = namespace
-        self._collection = collection
-
-        if validate:
-            self.get_schema().validate(self.get_blob().data)
-
-    def to_document(self):
-        return {
-            '_id': self._id,
-            'collection': self._collection,
-            'namespace': self._namespace,
-            'action': self._action,
-            'blob': self._blob,
-            'schema': self._schema
-        }
-
-
+        # Classmethod supers need arguments for some reason
+        return await super(JournalEntry, cls).create(timestamp=datetime.utcnow(), **kwargs)
