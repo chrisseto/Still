@@ -9,14 +9,10 @@ from wdim import exceptions
 from wdim.client import sort
 from wdim.client import query
 from wdim.client.database.base import DatabaseLayer
+from wdim.client.database.translation import Translator
 
 
-class MongoLayer(DatabaseLayer):
-
-    @classmethod
-    async def connect(cls, host='127.0.0.1', port=27017, name='wdim20150921'):
-        connection = await asyncio_mongo.Connection.create(host, port)
-        return cls(connection[name])
+class MongoTranslator(Translator):
 
     @classmethod
     def translate_query(cls, q: query.BaseQuery):
@@ -36,9 +32,17 @@ class MongoLayer(DatabaseLayer):
             return qf.sort({
                 sort.Ascending: qf.DESCENDING,
                 sort.Descending: qf.ASCENDING,
-            }[sorting.__class__](sorting.fields._name))
+            }[sorting.__class__](sorting.field._name))
         except KeyError:
             raise exceptions.UnsupportedOperation(sorting)
+
+
+class MongoLayer(DatabaseLayer):
+
+    @classmethod
+    async def connect(cls, host='127.0.0.1', port=27017, name='wdim20150921'):
+        connection = await asyncio_mongo.Connection.create(host, port)
+        return cls(connection[name])
 
     def __init__(self, connection):
         self.connection = connection
@@ -52,14 +56,20 @@ class MongoLayer(DatabaseLayer):
     async def load(self, cls, _id):
         return await self.connection[cls._collection_name].find_one({'_id': _id})
 
+    async def drop(self, cls):
+        return await self.connection[cls._collection_name].drop(safe=True)
+
     async def find_one(self, cls, query):
-        doc = await self.connection[cls._collection_name].find_one(self.translate_query(query))
+        doc = await self.connection[cls._collection_name].find_one(
+            MongoTranslator.translate_query(query)
+        )
         if not doc:
             raise exceptions.NotFound(query)
         return doc
 
-    async def find(self, cls, query, limit=0, skip=0, sort=None):
-        filter = sort and self.translate_query(sort)
+    async def find(self, cls, query=None, limit=0, skip=0, sort=None):
+        filter = sort and MongoTranslator.translate_sorting(sort)
+        query = (query or {}) and MongoTranslator.translate_query(query)
         return await self.connection[cls._collection_name].find(
             query,
             limit=limit,
