@@ -1,10 +1,11 @@
 import asyncio
 
-import asyncio_mongo
 from tornado.options import define, options
 
 from wdim import client
 from wdim.client.database import MongoLayer
+from wdim.client.database import ElasticSearchLayer
+from wdim.client.database import CompoundWriteLayer
 
 
 try:
@@ -19,12 +20,21 @@ define('namespace', default='sys_shell', help='The namespace to use')
 
 
 async def get_context():
-    connection = await MongoLayer.connect(options.db, options.port, options.dbname)
+    # connection = await MongoLayer.connect(options.db, options.port, options.dbname)
+
+    mongo_layer = await MongoLayer.connect()
+    es_layer = await ElasticSearchLayer.connect()
+    connection = CompoundWriteLayer(es_layer, mongo_layer)
 
     assert await client.Storable.connect(connection)
 
+    namespace = await client.Namespace.get_by_namespace('Shell')
+    collection = await namespace.get_collection('first')
+
     return {
         'client': client,
+        'namespace': namespace,
+        'collection': collection,
         # 'database': database,
         # 'mongo_connection': connection,
     }
