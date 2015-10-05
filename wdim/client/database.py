@@ -1,7 +1,11 @@
 import abc
 
 import asyncio_mongo
+from asyncio_mongo import _pymongo
+from asyncio_mongo import exceptions
 from asyncio_mongo import filter as qf
+
+from wdim import exceptions
 
 
 class DatabaseLayer(metaclass=abc.ABCMeta):
@@ -30,16 +34,32 @@ class MongoLayer(DatabaseLayer):
         self.connection = connection
 
     async def insert(self, inst):
-        return await self.connection[inst._collection_name].insert(await inst.to_document(), safe=True)
+        try:
+            return await self.connection[inst._collection_name].insert(inst.to_document(), safe=True)
+        except _pymongo.errors.DuplicateKeyError:
+            raise exceptions.UniqueViolation
 
     async def load(self, cls, _id):
-        return await self.connection[cls._collection_name].find({'_id': _id})
+        return await self.connection[cls._collection_name].find_one({'_id': _id})
 
     async def find_one(self, cls, query):
-        return await self.connection[cls._collection_name].find_one(query)
+        doc = await self.connection[cls._collection_name].find_one(query)
+        if not doc:
+            raise exceptions.NotFound(query)
+        return doc
+
+    async def find(self, cls, query, limit=0, skip=0, sort=None):
+        filter = sort and qf.sort(sort)
+        return await self.connection[cls._collection_name].find(
+            query,
+            limit=limit,
+            skip=skip,
+            filter=filter
+        )
 
     async def ensure_index(self, name, indices):
-        for index in indices:
+        for keys, opts in indices:
             await self.connection[name].ensure_index(
-                qf.sort([index['key'], 1]), unique=index['unique']
+                qf.sort([(key, opts.get('order', 1)) for key in keys]),
+                unique=opts.get('unique', False)
             )
