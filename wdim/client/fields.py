@@ -1,8 +1,12 @@
 import abc
 import datetime
 from enum import Enum
+from collections.abc import Awaitable
 
 from asyncio_mongo import bson
+from dateutil.parser import parse
+
+from wdim.client import query
 
 
 class Field(metaclass=abc.ABCMeta):
@@ -11,6 +15,7 @@ class Field(metaclass=abc.ABCMeta):
         if unique:
             index = True
 
+        self._name = None
         self.index = index
         self.unique = unique
         # TODO implement
@@ -20,11 +25,18 @@ class Field(metaclass=abc.ABCMeta):
     def parse(self, value):
         raise NotImplemented
 
-    @abc.abstractmethod
     def to_document(self, value):
         return value
 
+    def get_value(self, inst):
+        return inst._data.get(self._name)
+
+    def set_value(self, instance, value):
+        instance._data[self._name] = value
+
     def __get__(self, inst, owner):
+        assert self._name is not None, 'Field must be attached to a class'
+
         # inst being None indicates that we're being accessed
         # by the class we're attached to, return self for ease of use
         if inst is None:
@@ -33,22 +45,29 @@ class Field(metaclass=abc.ABCMeta):
         return self.get_value(inst)
 
     def __set__(self, instance, value, override=False):
+        assert self._name is not None, 'Field must be attached to a class'
+
         if not override:
             raise ValueError('Fields are read-only')
         return self.set_value(instance, value)
 
-    def get_value(self, inst):
-        for key, field in inst._fields.items():
-            if field == self:
-                return inst._data.get(key)
-        raise Exception('Wat')
+    def __eq__(self, value):
+        return query.Equals(self._name, value)
 
-    def set_value(self, instance, value):
-        for key, field in instance._fields.items():
-            if field == self:
-                instance._data[key] = value
-                return
-        raise Exception('Wat')
+    def __ne__(self, value):
+        pass
+
+    def __lt__(self, value):
+        pass
+
+    def __gt__(self, value):
+        pass
+
+    def __ge__(self, value):
+        pass
+
+    def __le__(self, value):
+        pass
 
 
 class ObjectIdField(Field):
@@ -80,8 +99,11 @@ class DictField(Field):
 class DatetimeField(Field):
 
     def parse(self, value):
-        assert isinstance(value, datetime.datetime)
-        return value
+        if isinstance(value, str):
+            return parse(value)
+        if isinstance(value, datetime.datetime):
+            return value
+        raise Exception('value must be str or datetime, got {}'.format(value))
 
 
 class EnumField(Field):
