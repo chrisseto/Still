@@ -97,16 +97,22 @@ class EnumField(Field):
     def get_value(self, inst):
         return self._enum(super().get_value(inst))
 
+    def to_document(self, value):
+        return value.value
 
-class AsyncObjectId(bson.ObjectId):
 
-    def __init__(self, *args, klass=None, **kwargs):
-        assert isinstance(klass, type), 'klass must be a type'
-        self._klass = klass
-        super().__init__(*args, **kwargs)
+def AwaitableLoaderFactory(klass, type_, *args, **kwargs):
+    assert isinstance(klass, type), 'klass must be a type, got {!r}'.format(klass)
 
-    def __await__(self):
-        return self._klass.load(self).__await__()
+    class _Awaitable(type_, Awaitable):
+        _is_coroutine = True
+
+        def __await__(self):
+            return klass.load(self).__await__()
+
+        __iter__ = __await__
+
+    return _Awaitable(*args, **kwargs)
 
 
 class ForeignField(Field):
@@ -137,4 +143,4 @@ class ForeignField(Field):
         _id = super().get_value(inst)
         if _id is None:
             return None
-        return AsyncObjectId(_id, klass=self.foreign_class)
+        return AwaitableLoaderFactory(self.foreign_class, type(_id), _id)
