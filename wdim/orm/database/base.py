@@ -34,5 +34,5 @@ class DatabaseLayer(metaclass=abc.ABCMeta):
 
     def __rshift__(self, other):
         # TODO resolve circular import
-        from wdim.client.database import CompoundWriteLayer
+        from wdim.orm.database import CompoundWriteLayer
         return CompoundWriteLayer(self, other)
