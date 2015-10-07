@@ -1,12 +1,12 @@
 import json
 import hashlib
 
-from wdim import exceptions
-from wdim.client import fields
-from wdim.client.storable import Storable
+from wdim import orm
+from wdim.orm import fields
+from wdim.orm import exceptions
 
 
-class Blob(Storable):
+class Blob(orm.Storable):
 
     HASH_METHOD = 'sha256'
 

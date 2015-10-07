@@ -1,5 +1,5 @@
-from wdim.client import fields
-from wdim.client.storable import Storable
+from wdim.orm import fields
+from wdim.orm import Storable
 from wdim.client.collection import Collection
 
 

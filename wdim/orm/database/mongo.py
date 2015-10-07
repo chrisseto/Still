@@ -5,11 +5,11 @@ from asyncio_mongo import _pymongo
 from asyncio_mongo import exceptions
 from asyncio_mongo import filter as qf
 
-from wdim import exceptions
-from wdim.client import sort
-from wdim.client import query
-from wdim.client.database.base import DatabaseLayer
-from wdim.client.database.translation import Translator
+from wdim.orm import sort
+from wdim.orm import query
+from wdim.orm import exceptions
+from wdim.orm.database.base import DatabaseLayer
+from wdim.orm.database.translation import Translator
 
 
 class MongoTranslator(Translator):

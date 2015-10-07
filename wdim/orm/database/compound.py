@@ -1,4 +1,4 @@
-from wdim.client.database.base import DatabaseLayer
+from wdim.orm.database.base import DatabaseLayer
 
 
 class CompoundWriteLayer(DatabaseLayer):

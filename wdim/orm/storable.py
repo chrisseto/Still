@@ -1,8 +1,8 @@
 import abc
 
 from wdim.util import pack
-from wdim import exceptions
-from wdim.client import fields
+from wdim.orm import fields
+from wdim.orm import exceptions
 
 
 class StorableMeta(abc.ABCMeta):

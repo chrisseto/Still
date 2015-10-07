@@ -3,9 +3,10 @@ import asyncio
 from tornado.options import define, options
 
 from wdim import client
-from wdim.client.database import MongoLayer
-from wdim.client.database import ElasticSearchLayer
-from wdim.client.database import CompoundWriteLayer
+from wdim.orm import Storable
+from wdim.orm.database import MongoLayer
+from wdim.orm.database import ElasticSearchLayer
+from wdim.orm.database import CompoundWriteLayer
 
 
 try:
@@ -26,7 +27,7 @@ async def get_context():
     es_layer = await ElasticSearchLayer.connect()
     connection = CompoundWriteLayer(es_layer, mongo_layer)
 
-    assert await client.Storable.connect(connection)
+    assert await Storable.connect(connection)
 
     namespace = await client.Namespace.get_by_namespace('Shell')
     collection = await namespace.get_collection('first')

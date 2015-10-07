@@ -6,7 +6,7 @@ from collections.abc import Awaitable
 from asyncio_mongo import bson
 from dateutil.parser import parse
 
-from wdim.client import query
+from wdim.orm import query
 
 
 class Field(metaclass=abc.ABCMeta):
@@ -86,6 +86,12 @@ class StringField(Field):
         if value is None:
             return ''
         return str(value)
+
+
+class BoolField(Field):
+
+    def parse(self, value):
+        return bool(value)
 
 
 class DictField(Field):

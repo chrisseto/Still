@@ -1,9 +1,9 @@
 from datetime import datetime
 
 from wdim.util import pack
-from wdim.client import fields
+from wdim.orm import fields
+from wdim.orm import Storable
 from wdim.client.actions import Action
-from wdim.client.storable import Storable
 
 
 class JournalEntry(Storable):
@@ -24,6 +24,7 @@ class JournalEntry(Storable):
             pack('timestamp', order=1),
             pack('namespace', 'collection', 'record_id', order=1),
             pack('namespace', 'collection', 'record_id', 'timestamp', order=1, unique=True),
+            pack('namespace', 'collection', 'record_id', 'timestamp', 'action', order=1, unique=True),
         ]
 
     @classmethod
