@@ -157,15 +157,10 @@ class ForeignField(Field):
         if value is None and not self.required:
             return None
 
-        assert isinstance(
-            value,
-            (str, bson.ObjectId, self.foreign_class)
-        ), 'value must be a primary key or instance of {!r}, got {!r}'.format(self.foreign_class, value)
+        if isinstance(value, self.foreign_class):
+            return value._id
 
-        if isinstance(value, (str, bson.ObjectId)):
-            return value
-
-        return value._id
+        return self.foreign_class._id.parse(value)
 
     def get_value(self, inst):
         _id = super().get_value(inst)
