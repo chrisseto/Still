@@ -132,3 +132,9 @@ class Storable(metaclass=StorableMeta):
             key: field.to_document(self._data.get(key))
             for key, field in self._fields.items()
         }
+
+    async def embed(self):
+        ret = {}
+        for key, field in self._fields.items():
+            ret[key] = await field.embed(self._data.get(key))
+        return ret

@@ -28,6 +28,9 @@ class Field(metaclass=abc.ABCMeta):
     def to_document(self, value):
         return value
 
+    async def embed(self, value):
+        return self.to_document(value)
+
     def get_value(self, inst):
         return inst._data.get(self._name)
 
@@ -167,3 +170,8 @@ class ForeignField(Field):
         if _id is None:
             return None
         return AwaitableLoaderFactory(self.foreign_class, type(_id), _id)
+
+    async def embed(self, value):
+        if value is None:
+            return {}
+        return await(await klass.load(self)).embed()
