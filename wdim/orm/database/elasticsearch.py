@@ -27,11 +27,12 @@ class ElasticSearchTranslator(Translator):
 
         try:
             return {
-                query.And: lambda: reduce(operator.and_, (cls.translate_query(x) for x in q.querys)),
+                query.Or: lambda: reduce(operator.or_, (cls.translate_query(x) for x in q.queries)),
+                query.And: lambda: reduce(operator.and_, (cls.translate_query(x) for x in q.queries)),
                 query.Equals: lambda: elasticsearch_dsl.Q('match', **{q.name: q.value})
             }[q.__class__]()
         except KeyError:
-            raise exceptions.OperationNotSupported(query)
+            raise exceptions.UnsupportedOperation(q)
 
     @classmethod
     def translate_sorting(cls, sorting):
@@ -41,7 +42,7 @@ class ElasticSearchTranslator(Translator):
                 sort.Descending: '-' + sorting.field._name
             }[sorting.__class__]
         except KeyError:
-            raise exceptions.OperationNotSupported(query)
+            raise exceptions.UnsupportedOperation(sorting)
 
     @classmethod
     def translate_field(cls, field, value):
@@ -96,11 +97,11 @@ class ElasticSearchLayer(DatabaseLayer):
         search = elasticsearch_dsl.Search()
 
         if query:
-            search.query(ElasticSearchTranslator.translate_query(query))
+            search = search.query(ElasticSearchTranslator.translate_query(query))
         if limit or skip:
             search = search[skip:skip + limit]
         if sort:
-            search.sort(ElasticSearchTranslator.translate_sorting(sort))
+            search = search.sort(ElasticSearchTranslator.translate_sorting(sort))
 
         response = await self._send_request('GET', cls._collection_name, query=search)
 

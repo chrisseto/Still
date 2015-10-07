@@ -21,7 +21,7 @@ class MongoTranslator(Translator):
         try:
             return {
                 query.Equals: lambda: {q.name: q.value},
-                query.And: lambda: reduce(lambda x, y: {**x, **y}, (cls.translate_query(qu) for qu in q.querys), {})
+                query.And: lambda: reduce(lambda x, y: {**x, **y}, (cls.translate_query(qu) for qu in q.queries), {})
             }[q.__class__]()
         except KeyError:
             raise exceptions.UnsupportedOperation(q)
