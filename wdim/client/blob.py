@@ -1,5 +1,6 @@
 import json
 import hashlib
+from typing import Any, Dict
 
 from wdim import orm
 from wdim.orm import fields
@@ -14,7 +15,7 @@ class Blob(orm.Storable):
     data = fields.DictField()
 
     @classmethod
-    async def create(cls, data):
+    async def create(cls, data: Dict[str, Any]) -> 'Blob':
         sha = hashlib.new(cls.HASH_METHOD, json.dumps(data).encode('utf-8')).hexdigest()
         try:
             # Classmethod supers need arguments for some reason
@@ -23,5 +24,8 @@ class Blob(orm.Storable):
             return await cls.load(sha)
 
     @property
-    def hash(self):
+    def hash(self) -> str:
         return self._id
+
+    def __getitem__(self, key):
+        return self.data[key]
