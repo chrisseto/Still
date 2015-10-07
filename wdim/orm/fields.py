@@ -173,5 +173,5 @@ class ForeignField(Field):
 
     async def embed(self, value):
         if value is None:
-            return {}
+            return None
         return await(await klass.load(self)).embed()
