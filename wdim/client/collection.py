@@ -4,6 +4,7 @@ from wdim.orm import fields
 from wdim.orm import Storable
 from wdim.client.blob import Blob
 from wdim.client.actions import Action
+from wdim.client.schema import get_schema
 from wdim.client.journal import JournalEntry
 
 
@@ -24,9 +25,9 @@ class Collection(Storable):
         try:
             entry = next(await JournalEntry.find(
                 (JournalEntry.collection == self._id) &
-                (JournalEntry.record_id == self.schema) &
                 (JournalEntry.namespace == self.namespace) &
-                ((JournalEntry.action == Action.update_schema) | (JournalEntry.action == Action.delete_schema)),
+                (JournalEntry.record_id == self.SCHEMA_RESERVED) &
+                ((JournalEntry.action == Action.update_schema.value) | (JournalEntry.action == Action.delete_schema.value)),
                 limit=1, sort=sort.Descending(JournalEntry.timestamp)
             ))
         except StopIteration:
@@ -41,17 +42,17 @@ class Collection(Storable):
 
     async def set_schema(self, schema):
         try:
-            get_schema(blob['type']).validate_schema(blob['schema'])
+            get_schema(schema['type']).validate_schema(schema['schema'])
         except KeyError:
             pass  # TODO Exception
 
         blob = await Blob.create(schema)
         return await JournalEntry.create(
-            action=Action.schema_update,
-            record_id=key,
             blob=blob._id,
-            namespace=self.namespace,
             collection=self._id,
+            namespace=self.namespace,
+            action=Action.update_schema,
+            record_id=self.SCHEMA_RESERVED,
         )
 
     async def delete_schema(self):
@@ -64,8 +65,9 @@ class Collection(Storable):
         )
 
     async def set(self, key: str, data: dict) -> 'ObjectId':
-        if self.schema:
-            return None
+        schema = await self.get_schema()
+        if schema:
+            schema.validate(data)
 
         blob = await Blob.create(data)
         return await JournalEntry.create(
