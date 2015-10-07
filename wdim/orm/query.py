@@ -16,19 +16,19 @@ class BaseQuery(abc.ABC):
 class JointQuery(BaseQuery, metaclass=abc.ABCMeta):
 
     @property
-    def querys(self):
-        return self._querys
+    def queries(self):
+        return self._queries
 
-    def __init__(self, *querys):
-        self._querys = querys
+    def __init__(self, *queries):
+        self._queries = queries
 
     def __iter__(self):
-        return self.querys
+        return self.queries
 
     def __repr__(self):
         return '<{}({})>'.format(
             self.__class__.__name__,
-            ', '.join([q.__repr__() for q in self.querys])
+            ', '.join([q.__repr__() for q in self.queries])
         )
 
     def __str__(self):
