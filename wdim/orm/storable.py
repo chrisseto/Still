@@ -123,17 +123,26 @@ class Storable(metaclass=StorableMeta):
 
     def to_document(self, translator=None):
         if translator:
-            return {
-                key: translator.translate_field(field, self._data.get(key))
-                for key, field in self._fields.items()
-            }
+            translate = translator.translate_field
+        else:
+            translate = lambda field, data: field.to_document(data)
 
         return {
-            key: field.to_document(self._data.get(key))
+            key: translate(field, self._data.get(key))
             for key, field in self._fields.items()
         }
 
-    async def embed(self):
+    async def embed(self, translator=None):
+        if translator:
+            translate = translator.translate_field
+        else:
+            translate = lambda field, data: field.to_document(data)
+
+        return {
+            key: translate(field, self._data.get(key))
+            for key, field in self._fields.items()
+        }
+
         ret = {}
         for key, field in self._fields.items():
             ret[key] = await field.embed(self._data.get(key))
