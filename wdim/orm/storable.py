@@ -71,9 +71,9 @@ class Storable(metaclass=StorableMeta):
 
     @classmethod
     async def connect(cls, db, bootstrap=True):
-        Storable._DATABASE = db
+        cls._DATABASE = db
         if bootstrap:
-            return await Storable._bootstrap()
+            return await cls._bootstrap()
         return True
 
     @classmethod
@@ -93,12 +93,28 @@ class Storable(metaclass=StorableMeta):
         return inst
 
     @classmethod
+    async def upsert(cls, *, _id=None, **kwargs):
+        if _id:
+            inst = cls(_id=_id, **kwargs)
+        else:
+            inst = cls(**kwargs)
+
+        db_id = await cls._DATABASE.upsert(inst)
+
+        if _id:
+            assert _id == db_id, 'Database _id did not match given _id'
+
+        cls._fields['_id'].__set__(inst, db_id, override=True)
+
+        return inst
+
+    @classmethod
     def from_document(cls, document):
         return cls(**document)
 
     @classmethod
     async def find_one(cls, query):
-        doc = await Storable._DATABASE.find_one(cls, query)
+        doc = await cls._DATABASE.find_one(cls, query)
         if not doc:
             raise exceptions.NotFound()
         return cls.from_document(doc)
@@ -108,14 +124,16 @@ class Storable(metaclass=StorableMeta):
         return (
             cls.from_document(doc)
             for doc in
-            await Storable._DATABASE.find(cls, query=query, limit=limit, skip=skip, sort=sort)
+            await cls._DATABASE.find(cls, query=query, limit=limit, skip=skip, sort=sort)
         )
 
     @classmethod
     async def load(cls, _id):
-        return cls.from_document(await Storable._DATABASE.load(cls, _id))
+        return cls.from_document(await cls._DATABASE.load(cls, _id))
 
     def __init__(self, **kwargs):
+        assert set(kwargs.keys()).issubset(self._fields.keys()), 'Specified a key that is not in fields'
+
         self._data = {
             key: value.parse(kwargs.get(key))
             for key, value in self._fields.items()
@@ -138,12 +156,12 @@ class Storable(metaclass=StorableMeta):
         else:
             translate = lambda field, data: field.to_document(data)
 
-        return {
-            key: translate(field, self._data.get(key))
-            for key, field in self._fields.items()
-        }
-
         ret = {}
         for key, field in self._fields.items():
-            ret[key] = await field.embed(self._data.get(key))
+            if isinstance(field, fields.ForeignField):
+                foreign = getattr(self, key)
+                if foreign:
+                    ret[key] = await(await foreign).embed(translator=translator)
+                    continue
+            ret[key] = translate(field, self._data.get(key))
         return ret

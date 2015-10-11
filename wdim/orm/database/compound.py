@@ -18,6 +18,17 @@ class CompoundWriteLayer(DatabaseLayer):
 
         return write_id
 
+    async def upsert(self, inst):
+        write_id = await self.write_layer.upsert(inst)
+
+        inst.__class__._fields['_id'].__set__(inst, write_id, override=True)
+
+        base_id = await self.base_layer.upsert(inst)
+
+        assert str(base_id) == str(write_id), 'Base layer and write layer id did not match, ({} != {})'.format(base_id, write_id)
+
+        return write_id
+
     async def load(self, cls, _id):
         return await self.base_layer.load(cls, _id)
 
@@ -31,10 +42,8 @@ class CompoundWriteLayer(DatabaseLayer):
         return await self.base_layer.drop() and await self.write_layer.drop()
 
     async def ensure_index(self, *args, **kwargs):
-        return (
-            await self.base_layer.ensure_index(*args, **kwargs) and
-            await self.write_layer.ensure_index(*args, **kwargs)
-        )
+        await self.base_layer.ensure_index(*args, **kwargs)
+        await self.write_layer.ensure_index(*args, **kwargs)
 
     async def find(self, *args, **kwargs):
         return await self.base_layer.find(*args, **kwargs)

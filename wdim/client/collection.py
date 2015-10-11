@@ -2,10 +2,12 @@ from wdim import util
 from wdim.orm import sort
 from wdim.orm import fields
 from wdim.orm import Storable
+from wdim.orm import exceptions
 from wdim.client.blob import Blob
 from wdim.client.actions import Action
+from wdim.client.journal import Journal
+from wdim.client.document import Document
 from wdim.client.schema import get_schema
-from wdim.client.journal import JournalEntry
 
 
 class Collection(Storable):
@@ -13,22 +15,22 @@ class Collection(Storable):
     SCHEMA_RESERVED = 'system:schema'
 
     _id = fields.ObjectIdField()
-    collection = fields.StringField()
+    name = fields.StringField()
     namespace = fields.ForeignField(Storable.ClassGetter('Namespace'))
 
     class Meta:
         indexes = [
-            util.pack('namespace', 'collection', order=1, unique=True)
+            util.pack('name', 'collection', order=1, unique=True)
         ]
 
     async def get_schema(self):
         try:
-            entry = next(await JournalEntry.find(
-                (JournalEntry.collection == self._id) &
-                (JournalEntry.namespace == self.namespace) &
-                (JournalEntry.record_id == self.SCHEMA_RESERVED) &
-                ((JournalEntry.action == Action.update_schema.value) | (JournalEntry.action == Action.delete_schema.value)),
-                limit=1, sort=sort.Descending(JournalEntry.timestamp)
+            entry = next(await Journal.find(
+                (Journal.collection == self._id) &
+                (Journal.namespace == self.namespace) &
+                (Journal.record_id == self.SCHEMA_RESERVED) &
+                ((Journal.action == Action.update_schema.value) | (Journal.action == Action.delete_schema.value)),
+                limit=1, sort=sort.Descending(Journal.timestamp)
             ))
         except StopIteration:
             return None
@@ -47,7 +49,7 @@ class Collection(Storable):
             pass  # TODO Exception
 
         blob = await Blob.create(schema)
-        return await JournalEntry.create(
+        return await Journal.create(
             blob=blob._id,
             collection=self._id,
             namespace=self.namespace,
@@ -56,7 +58,7 @@ class Collection(Storable):
         )
 
     async def delete_schema(self):
-        return await JournalEntry.create(
+        return await Journal.create(
             blob=None,
             record_id=key,
             collection=self._id,
@@ -70,28 +72,35 @@ class Collection(Storable):
             schema.validate(data)
 
         blob = await Blob.create(data)
-        return await JournalEntry.create(
+        entry = await Journal.create(
             action=Action.update,
             record_id=key,
             blob=blob._id,
             namespace=self.namespace,
             collection=self._id,
         )
+        doc = await Document.create(
+            record_id=key,
+            blob=blob._id,
+            namespace=self.namespace,
+            collection=self._id,
+        )
+        return entry
 
     async def get(self, key):
         try:
-            return next(await JournalEntry.find(
-                (JournalEntry.record_id == key) &
-                (JournalEntry.namespace == self.namespace) &
-                (JournalEntry.collection == self._id),
+            return next(await Journal.find(
+                (Journal.record_id == key) &
+                (Journal.namespace == self.namespace) &
+                (Journal.collection == self._id),
                 limit=1,
-                sort=sort.Descending(JournalEntry.timestamp)
+                sort=sort.Descending(Journal.timestamp)
             ))
         except StopIteration:
-            return None
+            raise exceptions.NotFound()
 
     async def delete(self, key):
-        return await JournalEntry.create(
+        return await Journal.create(
             blob=None,
             record_id=key,
             collection=self._id,

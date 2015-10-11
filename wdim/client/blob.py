@@ -1,6 +1,7 @@
 import json
 import hashlib
 from typing import Any, Dict
+from collections import OrderedDict
 
 from wdim import orm
 from wdim.orm import fields
@@ -16,6 +17,7 @@ class Blob(orm.Storable):
 
     @classmethod
     async def create(cls, data: Dict[str, Any]) -> 'Blob':
+        data = OrderedDict([(key, data[key]) for key in sorted(data.keys())])
         sha = hashlib.new(cls.HASH_METHOD, json.dumps(data).encode('utf-8')).hexdigest()
         try:
             # Classmethod supers need arguments for some reason

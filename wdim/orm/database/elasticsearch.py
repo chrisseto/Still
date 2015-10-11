@@ -1,5 +1,6 @@
 import abc
 import json
+import enum
 import operator
 import datetime
 from functools import reduce
@@ -46,12 +47,16 @@ class ElasticSearchTranslator(Translator):
 
     @classmethod
     def translate_field(cls, field, value):
+        if value is None:
+            return value
+
         try:
             # TODO should probably just match on type
             return {
                 fields.DatetimeField: lambda: value.isoformat(),
                 fields.ObjectIdField: lambda: str(value),
-                fields.ForeignField: lambda: str(value)
+                fields.ForeignField: lambda: str(value),
+                fields.EnumField: lambda: value.value
             }[field.__class__]()
         except KeyError:
             return field.to_document(value)
@@ -63,12 +68,14 @@ class ElasticSearchTranslator(Translator):
             return {
                 fields.bson.ObjectId: lambda: str(value),
                 datetime.datetime: lambda: value.isoformat(),
-            }[value.__class__]()
+            }[getattr(value, '_original_class', value.__class__)]()
         except KeyError:
             return value
 
 
 class ElasticSearchLayer(DatabaseLayer):
+
+    translator = ElasticSearchTranslator
 
     @classmethod
     async def connect(cls, host='localhost', index_name='wdim20150921', port=9200):
@@ -85,7 +92,7 @@ class ElasticSearchLayer(DatabaseLayer):
         return await self.find_one(cls, cls._id == _id)
 
     async def find_one(self, cls, query):
-        search = elasticsearch_dsl.Search().query(ElasticSearchTranslator.translate_query(query))[:1]
+        search = elasticsearch_dsl.Search().query(self.translator.translate_query(query))[:1]
         response = await self._send_request('GET', cls._collection_name, query=search)
 
         if len(response.hits) == 0:
@@ -97,25 +104,32 @@ class ElasticSearchLayer(DatabaseLayer):
         search = elasticsearch_dsl.Search()
 
         if query:
-            search = search.query(ElasticSearchTranslator.translate_query(query))
+            search = search.query(self.translator.translate_query(query))
         if limit or skip:
             search = search[skip:skip + limit]
         if sort:
-            search = search.sort(ElasticSearchTranslator.translate_sorting(sort))
+            search = search.sort(self.translator.translate_sorting(sort))
 
         response = await self._send_request('GET', cls._collection_name, query=search)
-
-        if len(response.hits) == 0:
-            raise exceptions.NotFound()
 
         return (result.to_dict() for result in response.hits)
 
     async def ensure_index(self, cls, indices):
-        pass
+        try:
+            resp = await aiohttp.request('PUT', self.furl.url)
+            if resp.status != 200:
+                assert 'IndexAlreadyExistsException' in (await resp.json())['error']
+        finally:
+            resp.close()
 
     async def drop(self, cls):
+        copied = self.furl.copy()
+        copied.path.segments.append(cls._collection_name)
+
         # TODO validate return
-        resp = await self._send_request('DELETE', cls._collection_name)
+        resp = await aiohttp.request('DELETE', copied.url)
+
+        return resp.close()
 
     async def insert(self, inst):
         copied = self.furl.copy()
@@ -126,7 +140,7 @@ class ElasticSearchLayer(DatabaseLayer):
         resp = await aiohttp.request(
             'PUT',
             copied.url,
-            data=json.dumps(inst.to_document(ElasticSearchTranslator))
+            data=json.dumps(inst.to_document(self.translator))
         )
         assert resp.status in (200, 201)
 
@@ -134,6 +148,9 @@ class ElasticSearchLayer(DatabaseLayer):
             return (await resp.json())['_id']
         finally:
             resp.close()
+
+    async def upsert(self, inst):
+        return await self.insert(inst)
 
     async def _send_request(self, method, _type, query=None, _id=None):
         copied = self.furl.copy()
@@ -149,4 +166,50 @@ class ElasticSearchLayer(DatabaseLayer):
             data=json.dumps(query.to_dict()) if query else None
         )
 
-        return elasticsearch_dsl.result.Response(await resp.json())
+        try:
+            if resp.status == 404:
+                raise exceptions.NotFound()
+
+            if resp.status == 400:
+                return elasticsearch_dsl.result.Response({
+                    'hits': {
+                        "total": 0,
+                        "hits": [],
+                        "max_score": None,
+                    }})
+
+            return elasticsearch_dsl.result.Response(await resp.json())
+        finally:
+            resp.close()
+
+
+class EmbeddedElasticSearchTranslator(ElasticSearchTranslator):
+
+    @classmethod
+    def translate_query(cls, q):
+        if isinstance(q, query.Query) and isinstance(q._field, fields.ForeignField):
+            q._name = q._name + '._id'
+        return super(EmbeddedElasticSearchTranslator, cls).translate_query(q)
+
+
+class EmbeddedElasticSearchLayer(ElasticSearchLayer):
+
+    translator = EmbeddedElasticSearchTranslator
+
+    async def insert(self, inst):
+        copied = self.furl.copy()
+        copied.path.segments.append(inst.__class__._collection_name)
+        if inst._id:
+            copied.path.segments.append(str(inst._id))
+
+        resp = await aiohttp.request(
+            'PUT',
+            copied.url,
+            data=json.dumps(await inst.embed(self.translator))
+        )
+
+        try:
+            assert resp.status in (200, 201)
+            return (await resp.json())['_id']
+        finally:
+            resp.close()

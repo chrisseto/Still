@@ -45,12 +45,13 @@ class Query(BaseQuery, metaclass=abc.ABCMeta):
     def value(self):
         return self._value
 
-    def __init__(self, name, value):
-        self._name = name
-        self._value = value
+    def __init__(self, field, value):
+        self._field = field
+        self._name = field._name
+        self._value = field.parse(value)
 
     def __repr__(self):
-        return '<{}({}, {})>'.format(self.__class__.__name__, self.name, self.value)
+        return '<{}({}, {!r})>'.format(self.__class__.__name__, self.name, self.value)
 
     def __str__(self):
         return self.__repr__()

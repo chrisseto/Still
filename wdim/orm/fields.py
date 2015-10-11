@@ -28,9 +28,6 @@ class Field(metaclass=abc.ABCMeta):
     def to_document(self, value):
         return value
 
-    async def embed(self, value):
-        return self.to_document(value)
-
     def get_value(self, inst):
         return inst._data.get(self._name)
 
@@ -55,7 +52,7 @@ class Field(metaclass=abc.ABCMeta):
         return self.set_value(instance, value)
 
     def __eq__(self, value):
-        return query.Equals(self._name, value)
+        return query.Equals(self, value)
 
     def __ne__(self, value):
         pass
@@ -123,10 +120,8 @@ class EnumField(Field):
         super().__init__(**kwargs)
 
     def parse(self, value):
-        return self._enum(value)
-
-    def get_value(self, inst):
-        return self._enum(super().get_value(inst))
+        self._enum(value)
+        return value
 
     def to_document(self, value):
         return value.value
@@ -135,8 +130,12 @@ class EnumField(Field):
 def AwaitableLoaderFactory(klass, type_, *args, **kwargs):
     assert isinstance(klass, type), 'klass must be a type, got {!r}'.format(klass)
 
+    if getattr(type_, '_original_class', None):
+        return args[0]
+
     class _Awaitable(type_, Awaitable):
         _is_coroutine = True
+        _original_class = type_
 
         def __await__(self):
             return klass.load(self).__await__()
@@ -163,6 +162,9 @@ class ForeignField(Field):
         if isinstance(value, self.foreign_class):
             return value._id
 
+        if isinstance(value, dict):
+            value = value['_id']
+
         return self.foreign_class._id.parse(value)
 
     def get_value(self, inst):
@@ -170,8 +172,3 @@ class ForeignField(Field):
         if _id is None:
             return None
         return AwaitableLoaderFactory(self.foreign_class, type(_id), _id)
-
-    async def embed(self, value):
-        if value is None:
-            return None
-        return await(await klass.load(self)).embed()

@@ -8,9 +8,12 @@ import tornado.platform.asyncio
 from tornado.options import define
 from tornado.options import options
 
-import asyncio_mongo
-
+from wdim import client
+from wdim.orm import Storable
 from wdim.server.api import v1
+from wdim.orm.database import MongoLayer
+from wdim.orm.database import EmbeddedElasticSearchLayer
+from wdim.orm.database import CompoundWriteLayer
 
 
 logger = logging.getLogger(__name__)
@@ -31,24 +34,22 @@ def api_to_handlers(api, **kwargs):
     ]
 
 
-def make_app(debug):
-    db, port = options.db.split(':')
-    database = asyncio.get_event_loop().run_until_complete(
-        asyncio_mongo.Connection.create(db, int(port))
-    )[options.dbname]
+async def make_app(debug):
+    mongo_layer = await MongoLayer.connect()
+    es_layer = await EmbeddedElasticSearchLayer.connect()
 
-    collection = database[options.collection]
+    assert await Storable.connect(mongo_layer)
+    assert await client.Document.connect(es_layer)
+    assert await client.Journal.connect(es_layer >> mongo_layer)
 
-    return tornado.web.Application(
-        api_to_handlers(v1, database=database, collection=collection),
-        debug=options.debug,
-    )
+    return tornado.web.Application(api_to_handlers(v1), debug=options.debug)
 
 
 def serve():
     tornado.platform.asyncio.AsyncIOMainLoop().install()
 
-    app = make_app(options.debug)  # Debug mode
+    # app = make_app(options.debug)  # Debug mode
+    app = asyncio.get_event_loop().run_until_complete(make_app(options.debug))
 
     logger.info('Listening on {}:{}'.format(options.host, options.port))
     app.listen(options.port, options.host)

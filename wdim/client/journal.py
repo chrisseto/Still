@@ -6,7 +6,7 @@ from wdim.orm import Storable
 from wdim.client.actions import Action
 
 
-class JournalEntry(Storable):
+class Journal(Storable):
 
     _id = fields.ObjectIdField()
 
@@ -32,4 +32,4 @@ class JournalEntry(Storable):
         assert timestamp is None, 'Cannot manually add timestamp'
 
         # Classmethod supers need arguments for some reason
-        return await super(JournalEntry, cls).create(timestamp=datetime.utcnow(), **kwargs)
+        return await super(Journal, cls).create(timestamp=datetime.utcnow(), **kwargs)

@@ -21,7 +21,8 @@ class MongoTranslator(Translator):
         try:
             return {
                 query.Equals: lambda: {q.name: q.value},
-                query.And: lambda: reduce(lambda x, y: {**x, **y}, (cls.translate_query(qu) for qu in q.queries), {})
+                query.Or: lambda: {'$or': [cls.translate_query(qu) for qu in q.queries]},
+                query.And: lambda: reduce(lambda x, y: {**x, **y}, (cls.translate_query(qu) for qu in q.queries), {}),
             }[q.__class__]()
         except KeyError:
             raise exceptions.UnsupportedOperation(q)
@@ -53,8 +54,12 @@ class MongoLayer(DatabaseLayer):
         except _pymongo.errors.DuplicateKeyError:
             raise exceptions.UniqueViolation
 
+    async def upsert(self, inst):
+        await self.connection[inst._collection_name].update({'_id': inst._id}, inst.to_document(), safe=True, upsert=True)
+        return inst._id
+
     async def load(self, cls, _id):
-        return await self.connection[cls._collection_name].find_one({'_id': _id})
+        return await self.find_one(cls, cls._id == _id)
 
     async def drop(self, cls):
         return await self.connection[cls._collection_name].drop(safe=True)
