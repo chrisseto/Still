@@ -1,3 +1,5 @@
+from typing import Optional
+
 from wdim import util
 from wdim.orm import sort
 from wdim.orm import fields
@@ -16,6 +18,7 @@ class Collection(Storable):
 
     _id = fields.ObjectIdField()
     name = fields.StringField()
+    permissions = fields.DictField()
     namespace = fields.ForeignField(Storable.ClassGetter('Namespace'))
 
     class Meta:
@@ -29,13 +32,13 @@ class Collection(Storable):
                 (Journal.collection == self._id) &
                 (Journal.namespace == self.namespace) &
                 (Journal.record_id == self.SCHEMA_RESERVED) &
-                ((Journal.action == Action.update_schema.value) | (Journal.action == Action.delete_schema.value)),
-                limit=1, sort=sort.Descending(Journal.timestamp)
+                ((Journal.action == Action.UPDATE_SCHEMA.value) | (Journal.action == Action.DELETE_SCHEMA.value)),
+                limit=1, sort=sort.Descending(Journal.modified_by)
             ))
         except StopIteration:
             return None
 
-        if entry.action == Action.delete_schema:
+        if entry.action == Action.DELETE_SCHEMA:
             return None
 
         blob = await entry.blob
@@ -53,7 +56,7 @@ class Collection(Storable):
             blob=blob._id,
             collection=self._id,
             namespace=self.namespace,
-            action=Action.update_schema,
+            action=Action.UPDATE_SCHEMA,
             record_id=self.SCHEMA_RESERVED,
         )
 
@@ -62,48 +65,81 @@ class Collection(Storable):
             blob=None,
             record_id=key,
             collection=self._id,
-            action=Action.delete,
+            action=Action.DELETE,
             namespace=self.namespace,
         )
 
-    async def set(self, key: str, data: dict) -> 'ObjectId':
+    @util.combomethod
+    async def create(self, key, data, user):
+        schema = await self.get_schema()
+        if schema:
+            schema.validate(data)
+
+        try:
+            await self.read(key)
+        except exceptions.NotFound:
+            pass
+        else:
+            raise exceptions.UniqueViolation(key)
+
+        blob = await Blob.create(data)
+
+        entry = await Journal.create(
+            record_id=key,
+            action=Action.CREATE,
+            created_by=user,
+            blob=blob._id,
+            namespace=self.namespace,
+            collection=self._id,
+        )
+
+        return await Document.create_from_entry(entry)
+
+    @util.combomethod
+    async def read(self, key):
+        return await Document.load('{}::{}'.format(self._id, key))
+
+    @util.combomethod
+    async def update(self, key, data, user, merge=False):
+        previous = await self.read(key)
+
+        if merge:
+            data = util.merge((await previous.blob).data, data)
+
         schema = await self.get_schema()
         if schema:
             schema.validate(data)
 
         blob = await Blob.create(data)
+
         entry = await Journal.create(
-            action=Action.update,
+            modified_by=user,
+            created=previous.created,
+            created_by=previous.created_by,
+            action=Action.UPDATE,
             record_id=key,
             blob=blob._id,
             namespace=self.namespace,
             collection=self._id,
         )
-        doc = await Document.create(
-            record_id=key,
-            blob=blob._id,
-            namespace=self.namespace,
-            collection=self._id,
-        )
-        return entry
 
-    async def get(self, key):
-        try:
-            return next(await Journal.find(
-                (Journal.record_id == key) &
-                (Journal.namespace == self.namespace) &
-                (Journal.collection == self._id),
-                limit=1,
-                sort=sort.Descending(Journal.timestamp)
-            ))
-        except StopIteration:
-            raise exceptions.NotFound()
+        return await Document.create_from_entry(entry)
 
-    async def delete(self, key):
-        return await Journal.create(
+    @util.combomethod
+    async def delete(self, key, user):
+        previous = await self.read(key)
+
+        entry = await Journal.create(
+            modified_by=user,
+            created=previous.created,
+            created_by=previous.created_by,
             blob=None,
             record_id=key,
             collection=self._id,
-            action=Action.delete,
+            action=Action.DELETE,
             namespace=self.namespace,
         )
+
+        previous.delete()
+
+        return None

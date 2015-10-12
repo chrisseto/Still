@@ -2,9 +2,9 @@ import enum
 
 
 class Action(enum.Enum):
-    create = 0
-    delete = 1
-    update = 2
-    create_schema = 3
-    update_schema = 4
-    delete_schema = 5
+    CREATE = 0
+    DELETE = 1
+    UPDATE = 2
+    CREATE_SCHEMA = 3
+    UPDATE_SCHEMA = 4
+    DELETE_SCHEMA = 5

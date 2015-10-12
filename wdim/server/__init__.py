@@ -24,6 +24,7 @@ define('host', default='127.0.0.01', help='The host to listen on')
 define('db', default='127.0.0.1:27017', help='TokuMX URI')
 define('collection', default='wdim', help='The Mongo collection to use')
 define('dbname', default='wdim20150921', help='The Mongo database to use')
+define('demo', default='bucket-sort', help='Statically serve a folder from examples')
 
 
 def api_to_handlers(api, **kwargs):
@@ -42,7 +43,12 @@ async def make_app(debug):
     assert await client.Document.connect(es_layer)
     assert await client.Journal.connect(es_layer >> mongo_layer)
 
-    return tornado.web.Application(api_to_handlers(v1), debug=options.debug)
+    return tornado.web.Application(
+        api_to_handlers(v1) + [
+            (r'/', tornado.web.RedirectHandler, {'url': '/index.html'}),
+            (r'/(.*)', tornado.web.StaticFileHandler, {'path': os.path.join('examples', options.demo)})
+        ], debug=options.debug
+    )
 
 
 def serve():

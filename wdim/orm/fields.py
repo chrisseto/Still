@@ -105,11 +105,13 @@ class DictField(Field):
 class DatetimeField(Field):
 
     def parse(self, value):
+        if value is None and not self.required:
+            return None
         if isinstance(value, str):
             return parse(value)
         if isinstance(value, datetime.datetime):
             return value
-        raise Exception('value must be str or datetime, got {}'.format(value))
+        raise Exception('{} must be str or datetime, got {}'.format(self._name, value))
 
 
 class EnumField(Field):

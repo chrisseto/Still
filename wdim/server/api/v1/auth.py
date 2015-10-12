@@ -1,5 +1,5 @@
-import uuid
 import asyncio
+import datetime
 
 import jwt
 import aiohttp
@@ -33,7 +33,7 @@ class AuthHandler(BaseAPIHandler):
         uid = yield from getattr(self, '_' + provider)(data['attributes'])
 
         signed_jwt = jwt.encode({
-            'exp': 3600,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1),
             'sub': '{}-{}'.format(provider, uid)
         }, 'TestKey')
 
