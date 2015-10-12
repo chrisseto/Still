@@ -24,6 +24,10 @@ class AuthHandler(BaseAPIHandler):
         assert resp.status == 200
         return (yield from resp.json())['id']
 
+    @asyncio.coroutine
+    def _anon(self, data):
+        return uuid.uuid4().replace('-', '')
+
     @tornado.gen.coroutine
     def post(self, namespace):
         data = self.json['data']
