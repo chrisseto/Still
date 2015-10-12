@@ -4,3 +4,6 @@ jsonschema==2.5.1
 colorlog==2.6.0
 ipython==4.0.0
 tornado==4.2.1
+python-dateutil==2.4.2
+furl==0.4.8
+elasticsearch_dsl==0.0.8<
