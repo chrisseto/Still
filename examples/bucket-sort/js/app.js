@@ -1,11 +1,6 @@
+var SCOPE = 'osf.users.all_read';
+var REDIRECT_URI = 'http://localhost:1212';
 var CLIENT_ID = 'db1ff76b6001460c884c33b74b2784f8';
-var REDIRECT_URI = 'http://localhost:8080';
-
-/**
- *  This implementation uses an inefficient method of data handling to illustrate the ui.
- *  A wrapper viewmodel can be used to make this more efficient.
- *  For example Knockout, mithril etc.
- */
 
 $(document).ready(function(){
 
@@ -55,7 +50,7 @@ $(document).ready(function(){
 
     function login() {
         if (!window.location.hash || window.location.hash === '') {
-            window.location = 'https://staging-accounts.osf.io/oauth2/authorize?response_type=token&scope=osf.full_read&client_id=' + CLIENT_ID + '&redirect_uri=' + encodeURI(REDIRECT_URI);
+            window.location = 'https://staging-accounts.osf.io/oauth2/authorize?response_type=token&scope=' + SCOPE + '&client_id=' + CLIENT_ID + '&redirect_uri=' + encodeURI(REDIRECT_URI);
             return;
         }
 
@@ -101,7 +96,7 @@ $(document).ready(function(){
     function init (uid) {
         loadCards().then(function(cards) {
             $('#list').html(cards.map(function(item){
-                return '<div class="item alert alert-info" data-doc-id="' + uid + '-' + item.id + '" data-id="'+item.id+'">' + item.attributes.content + '</div>';
+                return '<div class="item alert alert-info" data-id="'+item.id+'">' + item.attributes.content + '</div>';
             }));
 
             return $.ajax({

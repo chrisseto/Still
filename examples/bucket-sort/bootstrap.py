@@ -48,11 +48,13 @@ async def main():
     with open(cards_loc) as cards:
         for card in json.load(cards)['cards']:
             try:
-                entry = await collection.get(card['id'])
+                entry = await collection.read(card['id'])
                 blob = await entry.blob
                 assert blob.data['content'] == card['content']
-            except (AssertionError, exceptions.NotFound):
-                await collection.set(card['id'], {'content': card['content']})
+            except AssertionError:
+                await collection.update(card['id'], {'content': card['content']}, 'sys')
+            except exceptions.NotFound:
+                await collection.create(card['id'], {'content': card['content']}, 'sys')
 
 
 if __name__ == '__main__':
