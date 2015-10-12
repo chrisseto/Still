@@ -1,3 +1,4 @@
+import uuid
 import asyncio
 import datetime
 
@@ -26,7 +27,7 @@ class AuthHandler(BaseAPIHandler):
 
     @asyncio.coroutine
     def _anon(self, data):
-        return uuid.uuid4().replace('-', '')
+        return str(uuid.uuid4()).replace('-', '')
 
     @tornado.gen.coroutine
     def post(self, namespace):
