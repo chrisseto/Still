@@ -1,6 +1,7 @@
 from wdim import util
 from wdim.orm import fields
 from wdim.orm import Storable
+from wdim.client.permissions import Permissions
 
 
 class Document(Storable):
@@ -46,6 +47,12 @@ class Document(Storable):
             created_by=entry.created_by,
             modified_by=entry.modified_by,
         )
+
+    @property
+    def permissions(self):
+        return {
+            self.created_by: Permissions.ADMIN
+        }
 
     async def serialize(self, furl):
         self_url = furl.copy()

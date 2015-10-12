@@ -3,6 +3,7 @@ import json
 import asyncio
 
 from wdim import client
+from wdim.client.permissions import Permissions
 from wdim.orm import Storable
 from wdim.orm import exceptions
 from wdim.orm.database import MongoLayer
@@ -40,10 +41,16 @@ async def main():
     except exceptions.UniqueViolation:
         collection = await ns.get_collection('placements')
 
+    collection._fields['permissions'].__set__(collection, {'osf': Permissions.CREATE}, override=True)
+    await collection._DATABASE.upsert(collection)
+
     try:
         collection = await ns.create_collection('cards')
     except exceptions.UniqueViolation:
         collection = await ns.get_collection('cards')
+
+    collection._fields['permissions'].__set__(collection, {'*': Permissions.READ}, override=True)
+    await collection._DATABASE.upsert(collection)
 
     with open(cards_loc) as cards:
         for card in json.load(cards)['cards']:

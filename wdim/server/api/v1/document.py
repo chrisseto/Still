@@ -10,6 +10,7 @@ from asyncio_mongo import bson
 
 from wdim import client
 from wdim.orm import exceptions
+from wdim.client.permissions import Permissions
 from wdim.orm.database import elasticsearch
 from wdim.server.api.v1 import url
 from wdim.server.api.v1.base import BaseAPIHandler
@@ -20,21 +21,31 @@ class DocumentsHandler(BaseAPIHandler):
 
     @tornado.gen.coroutine
     def prepare(self):
-        try:
-            decoded = jwt.decode(self.get_cookie('cookie'), 'TestKey', option={'require_exp': True})
-            self.user = decoded['sub']
-        except jwt.ExpiredSignatureError:
-            self.user = None
+        self.user = jwt.decode(self.get_cookie('cookie'), 'TestKey', option={'require_exp': True})['sub']
         self.namespace = yield from client.Namespace.get_by_name(self.path_kwargs['namespace'])
         self.collection = yield from self.namespace.get_collection(self.path_kwargs['collection'])
+        self.permissions = Permissions.get_permissions(self.user, self.namespace, self.collection)
+
+        method = self.request.method.lower()
+
+        if method == 'get':
+            if not self.permissions & Permissions.READ_WRITE:
+                raise tornado.web.HTTPError(status_code=403)
+        else:
+            if not self.permissions & Permissions.from_method(method):
+                raise tornado.web.HTTPError(status_code=403)
 
     @tornado.gen.coroutine
     def get(self, namespace, collection):
         limit = 50
         page = int(self.get_query_argument('page', default=0))
 
+        query = client.Document.collection == self.collection._id
+        if not self.permissions & Permissions.READ:
+            query &= client.Document.created_by == self.user
+
         data = []
-        for document in (yield from client.Document.find(client.Document.collection == self.collection._id, limit=limit, skip=page * limit)):
+        for document in (yield from client.Document.find(query, limit=limit, skip=page * limit)):
             data.append({
                 'id': document.record_id,
                 'type': self.collection.name,
@@ -87,6 +98,12 @@ class DocumentHandler(BaseAPIHandler):
             self.user = None
         self.namespace = yield from client.Namespace.get_by_name(self.path_kwargs['namespace'])
         self.collection = yield from self.namespace.get_collection(self.path_kwargs['collection'])
+        self.document = yield from self.collection.read(self.path_kwargs['record_id'])
+
+        self.permissions = Permissions.get_permissions(self.user, self.namespace, self.collection, self.document)
+
+        if not self.permissions & Permissions.from_method(self.request.method):
+            raise tornado.web.HTTPError(status_code=403)
 
     @tornado.gen.coroutine
     def get(self, namespace, collection, record_id):
@@ -135,6 +152,9 @@ class HistoryHandler(BaseAPIHandler):
             self.user = None
         self.namespace = yield from client.Namespace.get_by_name(self.path_kwargs['namespace'])
         self.collection = yield from self.namespace.get_collection(self.path_kwargs['collection'])
+
+        if not Permissions.get_permissions(self.user, self.namespace, self.collection) & Permissions.ADMIN:
+            raise tornado.web.HTTPError(status_code=403)
 
     @tornado.gen.coroutine
     def get(self, namespace, collection, record_id):

@@ -7,6 +7,7 @@ class Namespace(Storable):
 
     _id = fields.ObjectIdField()
     name = fields.StringField(unique=True)
+    permissions = fields.DictField()
 
     @classmethod
     async def get_by_name(cls, name):

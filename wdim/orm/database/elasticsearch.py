@@ -30,7 +30,7 @@ class ElasticSearchTranslator(Translator):
             return {
                 query.Or: lambda: reduce(operator.or_, (cls.translate_query(x) for x in q.queries)),
                 query.And: lambda: reduce(operator.and_, (cls.translate_query(x) for x in q.queries)),
-                query.Equals: lambda: elasticsearch_dsl.Q('match', **{q.name: q.value})
+                query.Equals: lambda: elasticsearch_dsl.F('term', **{q.name: q.value})
             }[q.__class__]()
         except KeyError:
             raise exceptions.UnsupportedOperation(q)
@@ -79,7 +79,9 @@ class ElasticSearchLayer(DatabaseLayer):
 
     @classmethod
     async def connect(cls, host='localhost', index_name='wdim20150921', port=9200):
-        return cls(host, port, index_name)
+        inst = cls(host, port, index_name)
+        await inst._create_index()
+        return inst
 
     def __init__(self, address, port, index_name):
         self.furl = furl.furl()
@@ -88,11 +90,19 @@ class ElasticSearchLayer(DatabaseLayer):
         self.furl.scheme = 'http'
         self.furl.path.add(index_name)
 
+    async def _create_index(self):
+        try:
+            resp = await aiohttp.request('PUT', self.furl.url)
+            if resp.status != 200:
+                assert 'IndexAlreadyExistsException' in (await resp.json())['error']
+        finally:
+            resp.close()
+
     async def load(self, cls, _id):
         return await self.find_one(cls, cls._id == _id)
 
     async def find_one(self, cls, query):
-        search = elasticsearch_dsl.Search().query(self.translator.translate_query(query))[:1]
+        search = elasticsearch_dsl.Search().filter(self.translator.translate_query(query))[:1]
         response = await self._send_request('GET', cls._collection_name, query=search)
 
         if len(response.hits) == 0:
@@ -104,7 +114,7 @@ class ElasticSearchLayer(DatabaseLayer):
         search = elasticsearch_dsl.Search()
 
         if query:
-            search = search.query(self.translator.translate_query(query))
+            search = search.filter(self.translator.translate_query(query))
         if limit or skip:
             search = search[skip:skip + limit]
         if sort:
@@ -115,10 +125,25 @@ class ElasticSearchLayer(DatabaseLayer):
         return (result.to_dict() for result in response.hits)
 
     async def ensure_index(self, cls, indices):
+        url = self.furl.copy()
+        url.path.segments.extend(['_mapping', cls])
+        resp = await aiohttp.request('PUT', url.url, data=json.dumps({
+            cls: {
+                'dynamic_templates': [{
+                    'notanalyzed': {
+                        'match': '*',
+                        'match_mapping_type': 'string',
+                        'mapping': {
+                            'type': 'string',
+                            'index': 'not_analyzed'
+                        }
+                    }
+                }]
+            }
+        }))
+
         try:
-            resp = await aiohttp.request('PUT', self.furl.url)
-            if resp.status != 200:
-                assert 'IndexAlreadyExistsException' in (await resp.json())['error']
+            assert (await resp.json())['acknowledged']
         finally:
             resp.close()
 

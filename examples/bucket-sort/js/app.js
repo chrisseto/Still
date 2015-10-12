@@ -35,8 +35,8 @@ $(document).ready(function(){
                     }
                 }
             })
-        }).then(function(data) {
-            $(card).data('doc-id', data.data.id);
+        }).then(function(resp) {
+            $(card).data('doc-id', resp.data.id);
         });
     }
 
@@ -93,7 +93,7 @@ $(document).ready(function(){
         });
     }
 
-    function init (uid) {
+    function init(uid) {
         loadCards().then(function(cards) {
             $('#list').html(cards.map(function(item){
                 return '<div class="item alert alert-info" data-id="'+item.id+'">' + item.attributes.content + '</div>';
@@ -107,7 +107,8 @@ $(document).ready(function(){
             });
         }).then(function(data) {
             data.data.forEach(function(placement) {
-                var card = $('[data-doc-id=' + placement.id + ']').detach();
+                var card = $('[data-id=' + placement.attributes.card + ']').detach();
+                card.data('doc-id', placement.id);
                 card.data('position', placement.attributes.position);
                 $('#' + placement.attributes.bucket).prepend(card);
             });
